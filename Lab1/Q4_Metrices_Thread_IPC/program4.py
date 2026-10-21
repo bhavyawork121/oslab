@@ -5,7 +5,8 @@ from multiprocessing import Process, Value
 processes = [
     {"pid": "P1", "arrival": 0, "burst": 7},
     {"pid": "P2", "arrival": 2, "burst": 4},
-    {"pid": "P3", "arrival": 4, "burst": 1},
+    {"pid": "P3", "arrival": 
+     4, "burst": 1},
     {"pid": "P4", "arrival": 5, "burst": 4},
 ]
 
