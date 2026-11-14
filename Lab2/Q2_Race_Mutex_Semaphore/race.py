@@ -1,63 +1,142 @@
-import sys
 import threading
 import time
 
-sys.setswitchinterval(1e-6)
+NUMBER_OF_THREADS = 4
+INCREMENTS_PER_THREAD = 1000
 
-NUM_THREADS = 4
-INCREMENTS = 20_000
-EXPECTED = NUM_THREADS * INCREMENTS
 
-counter = 0
-mutex = threading.Lock()
-binary_sem = threading.Semaphore(1)  
+unsafe_counter = 0
 
 
 def unsafe_worker():
-    global counter
-    for _ in range(INCREMENTS):
-        temp = counter      
-        temp += 1          
-        time.sleep(0)       
-        counter = temp      
+    global unsafe_counter
+
+    for _ in range(INCREMENTS_PER_THREAD):
+        old_value = unsafe_counter
+        time.sleep(0)
+        unsafe_counter = old_value + 1
+
+
+def run_unsafe():
+    global unsafe_counter
+    unsafe_counter = 0
+
+    threads = []
+    start_time = time.perf_counter()
+
+    for _ in range(NUMBER_OF_THREADS):
+        t = threading.Thread(target=unsafe_worker)
+        threads.append(t)
+        t.start()
+
+    for t in threads:
+        t.join()
+
+    elapsed = time.perf_counter() - start_time
+    return unsafe_counter, elapsed
+
+
+mutex_counter = 0
+mutex = threading.Lock()
 
 
 def mutex_worker():
-    global counter
-    for _ in range(INCREMENTS):
+    global mutex_counter
+
+    for _ in range(INCREMENTS_PER_THREAD):
         with mutex:
-            temp = counter
-            temp += 1
-            counter = temp
+            old_value = mutex_counter
+            time.sleep(0)
+            mutex_counter = old_value + 1
+
+
+def run_mutex():
+    global mutex_counter
+    mutex_counter = 0
+
+    threads = []
+    start_time = time.perf_counter()
+
+    for _ in range(NUMBER_OF_THREADS):
+        t = threading.Thread(target=mutex_worker)
+        threads.append(t)
+        t.start()
+
+    for t in threads:
+        t.join()
+
+    elapsed = time.perf_counter() - start_time
+    return mutex_counter, elapsed
+
+
+semaphore_counter = 0
+binary_semaphore = threading.Semaphore(1)
 
 
 def semaphore_worker():
-    global counter
-    for _ in range(INCREMENTS):
-        binary_sem.acquire()    
-        temp = counter
-        temp += 1
-        counter = temp
-        binary_sem.release()    
+    global semaphore_counter
+
+    for _ in range(INCREMENTS_PER_THREAD):
+        with binary_semaphore:
+            old_value = semaphore_counter
+            time.sleep(0)
+            semaphore_counter = old_value + 1
 
 
-def run(name, worker):
-    global counter
-    counter = 0
-    threads = [threading.Thread(target=worker) for _ in range(NUM_THREADS)]
-    start = time.perf_counter()
-    for t in threads:
+def run_semaphore():
+    global semaphore_counter
+    semaphore_counter = 0
+
+    threads = []
+    start_time = time.perf_counter()
+
+    for _ in range(NUMBER_OF_THREADS):
+        t = threading.Thread(target=semaphore_worker)
+        threads.append(t)
         t.start()
+
     for t in threads:
         t.join()
-    elapsed = time.perf_counter() - start
-    status = "CORRECT" if counter == EXPECTED else "WRONG (race condition)"
-    print(f"{name:<18} expected={EXPECTED}  actual={counter}  "
-          f"time={elapsed:.4f}s  -> {status}")
+
+    elapsed = time.perf_counter() - start_time
+    return semaphore_counter, elapsed
+
+
+
+def main():
+    expected = NUMBER_OF_THREADS * INCREMENTS_PER_THREAD
+
+    print("========== SHARED COUNTER EXPERIMENT ==========")
+    print("Threads             :", NUMBER_OF_THREADS)
+    print("Increments per thread:", INCREMENTS_PER_THREAD)
+    print("Expected final value :", expected)
+
+    unsafe_value, unsafe_time = run_unsafe()
+    mutex_value, mutex_time = run_mutex()
+    semaphore_value, semaphore_time = run_semaphore()
+
+    print("\n========== RESULTS ==========")
+
+    print("\n1. WITHOUT SYNCHRONIZATION")
+    print("Actual value :", unsafe_value)
+    print("Correct?     :", unsafe_value == expected)
+    print(f"Time         : {unsafe_time:.4f} seconds")
+
+    print("\n2. WITH MUTEX")
+    print("Actual value :", mutex_value)
+    print("Correct?     :", mutex_value == expected)
+    print(f"Time         : {mutex_time:.4f} seconds")
+
+    print("\n3. WITH BINARY SEMAPHORE")
+    print("Actual value :", semaphore_value)
+    print("Correct?     :", semaphore_value == expected)
+    print(f"Time         : {semaphore_time:.4f} seconds")
+
+    print("\n========== CONCLUSION ==========")
+    print("Unsafe access can lose updates because threads race.")
+    print("Mutex and binary semaphore protect the critical section.")
+    print("Correctness is more important than a faster but wrong result.")
 
 
 if __name__ == "__main__":
-    print(f"Threads: {NUM_THREADS}, increments per thread: {INCREMENTS}\n")
-    run("Unsafe", unsafe_worker)
-    run("Mutex", mutex_worker)
-    run("Binary Semaphore", semaphore_worker)
+    main()
